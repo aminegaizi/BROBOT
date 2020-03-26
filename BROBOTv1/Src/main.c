@@ -46,6 +46,7 @@
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
+TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim4;
 
 UART_HandleTypeDef huart1;
@@ -65,10 +66,12 @@ static void MX_DMA_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_TIM4_Init(void);
+static void MX_TIM2_Init(void);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
 void usDelay(uint32_t uSec);
+void UltrasonicSensorHandling();
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
@@ -82,7 +85,7 @@ uint8_t myRxData1[11]; //Received Data UART1
 const float speedOfSound = 0.0343/2;
 float distance;
 
-char uartBuf[100];
+char uartBuf[90];
 /* USER CODE END 0 */
 
 /**
@@ -93,7 +96,6 @@ char uartBuf[100];
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-	uint32_t numTicks = 0;
 
   /* USER CODE END 1 */
 
@@ -119,9 +121,11 @@ int main(void)
   MX_USART2_UART_Init();
   MX_USART1_UART_Init();
   MX_TIM4_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   //HAL_UART_Receive_DMA(&huart2, myRxData, 11);
 
+  HAL_TIM_Base_Start_IT(&htim2);
   HAL_UART_Receive_DMA(&huart1, myRxData1, 11); //Enable RX interrupt DMA UART1
   /* USER CODE END 2 */
 
@@ -135,40 +139,9 @@ int main(void)
   /* USER CODE BEGIN 3 */
 	 // HAL_UART_Transmit(&huart2, myTxData , 13, 10);
 	 // HAL_UART_Transmit(&huart1, myTxData1 , 13, 10); //Transmit to Bluetooth
-	  HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin); //Toggle User LED
+	  //HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin); //Toggle User LED
 
-
-	  //Set TRIG to LOW for few uSec
-	  HAL_GPIO_WritePin(TRIG_GPIO_Port, TRIG_Pin, GPIO_PIN_RESET);
-	  usDelay(3);
-
-	  //*** START Ultrasonic measure routine ***//
-	  //1. Output 10 usec TRIG
-	  HAL_GPIO_WritePin(TRIG_GPIO_Port, TRIG_Pin, GPIO_PIN_SET);
-	  usDelay(10);
-	  HAL_GPIO_WritePin(TRIG_GPIO_Port, TRIG_Pin, GPIO_PIN_RESET);
-
-	  //2. Wait for ECHO pin rising edge
-	  while(HAL_GPIO_ReadPin(ECHO_GPIO_Port, ECHO_Pin) == GPIO_PIN_RESET);
-
-	  //3. Start measuring ECHO pulse width in usec
-	  numTicks = 0;
-	  while(HAL_GPIO_ReadPin(ECHO_GPIO_Port, ECHO_Pin) == GPIO_PIN_SET)
-	  {
-	  	numTicks++;
-	  	usDelay(2); //2.8usec
-	  };
-
-	  //4. Estimate distance in cm
-	  distance = (numTicks + 0.0f)*2.8*speedOfSound;
-
-	  //5. Print to UART terminal for debugging
-	  sprintf(uartBuf, "Distance (cm)  = %0.1f\r\n", distance);
-
-	  HAL_UART_Transmit(&huart1, (uint8_t *)uartBuf, strlen(uartBuf), 100);
-	  HAL_UART_Transmit(&huart2, (uint8_t *)uartBuf, strlen(uartBuf), 100);
-
-	  HAL_Delay(1000); //Delay 1 second
+	  //HAL_Delay(1000); //Delay 1 second
 
   }
   /* USER CODE END 3 */
@@ -231,6 +204,38 @@ void SystemClock_Config(void)
 
   /* SysTick_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
+}
+
+/* TIM2 init function */
+static void MX_TIM2_Init(void)
+{
+
+  TIM_ClockConfigTypeDef sClockSourceConfig;
+  TIM_MasterConfigTypeDef sMasterConfig;
+
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 42000;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 1000;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
 }
 
 /* TIM4 init function */
@@ -390,6 +395,52 @@ void usDelay(uint32_t uSec)
 		while((TIM4->SR&0x0001) != 1);
 		TIM4->SR &= ~(0x0001);
 
+}
+
+
+void UltrasonicSensorHandling()
+{
+	uint32_t numTicks = 0;
+	//Set TRIG to LOW for few uSec
+	HAL_GPIO_WritePin(TRIG_GPIO_Port, TRIG_Pin, GPIO_PIN_RESET);
+	usDelay(3);
+
+	//*** START Ultrasonic measure routine ***//
+	//1. Output 10 usec TRIG
+	HAL_GPIO_WritePin(TRIG_GPIO_Port, TRIG_Pin, GPIO_PIN_SET);
+	usDelay(10);
+	HAL_GPIO_WritePin(TRIG_GPIO_Port, TRIG_Pin, GPIO_PIN_RESET);
+
+	//2. Wait for ECHO pin rising edge
+	while(HAL_GPIO_ReadPin(ECHO_GPIO_Port, ECHO_Pin) == GPIO_PIN_RESET);
+
+	//3. Start measuring ECHO pulse width in usec
+	numTicks = 0;
+	while(HAL_GPIO_ReadPin(ECHO_GPIO_Port, ECHO_Pin) == GPIO_PIN_SET)
+	{
+	numTicks++;
+	usDelay(2); //2.8usec
+	};
+
+	//4. Estimate distance in cm
+	distance = (numTicks + 0.0f)*2.8*speedOfSound;
+
+	//5. Print to UART terminal for debugging
+	sprintf(uartBuf, "Distance (cm)  = %0.1f\r\n", distance);
+
+	HAL_UART_Transmit(&huart1, (uint8_t *)uartBuf, strlen(uartBuf), 90);
+	HAL_UART_Transmit(&huart2, (uint8_t *)uartBuf, strlen(uartBuf), 90);
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  /* Prevent unused argument(s) compilation warning */
+  UNUSED(htim);
+  /* NOTE : This function Should not be modified, when the callback is needed,
+            the __HAL_TIM_PeriodElapsedCallback could be implemented in the user file
+   */
+  UltrasonicSensorHandling();
+  HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin); //Toggle User LED
 }
 /* USER CODE END 4 */
 
