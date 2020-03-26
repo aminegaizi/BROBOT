@@ -47,10 +47,10 @@
 /* Private variables ---------------------------------------------------------*/
 TIM_HandleTypeDef htim2;
 
-UART_HandleTypeDef huart1;
-UART_HandleTypeDef huart2;
-DMA_HandleTypeDef hdma_usart1_rx;
-DMA_HandleTypeDef hdma_usart2_rx;
+UART_HandleTypeDef huart1; //UART instance communicating with Bluetooth
+UART_HandleTypeDef huart2; //UART instance communicating with console
+DMA_HandleTypeDef hdma_usart1_rx; //RX interrupt
+DMA_HandleTypeDef hdma_usart2_rx; //RX interrupt
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
@@ -71,8 +71,11 @@ static void MX_USART1_UART_Init(void);
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
-uint8_t  myTxData[13] = "Hello World\r\n";
-uint8_t myRxData[11];
+uint8_t  myTxData2[13] = "Hello World\r\n"; //Transmitted Data UART2
+uint8_t myRxData2[11]; //Received Data UART2
+
+uint8_t  myTxData1[13] = "Hello World\r\n"; //Transmitted Data UART1
+uint8_t myRxData1[11]; //Received Data UART1
 /* USER CODE END 0 */
 
 /**
@@ -110,7 +113,9 @@ int main(void)
   MX_USART2_UART_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-  HAL_UART_Receive_DMA(&huart2, myRxData, 11);
+  //HAL_UART_Receive_DMA(&huart2, myRxData, 11);
+
+  HAL_UART_Receive_DMA(&huart1, myRxData1, 11); //Enable RX interrupt DMA UART1
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -121,10 +126,11 @@ int main(void)
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
-	  HAL_UART_Transmit(&huart2, myTxData , 13, 10);
-	  HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+	 // HAL_UART_Transmit(&huart2, myTxData , 13, 10);
+	  HAL_UART_Transmit(&huart1, myTxData1 , 13, 10); //Transmit to Bluetooth
+	  HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin); //Toggle User LED
 
-	  HAL_Delay(1000);
+	  HAL_Delay(1000); //Delay 1 second
   }
   /* USER CODE END 3 */
 
@@ -318,11 +324,17 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+/*
+ * Bluetooth received data handling
+ */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
   /* Prevent unused argument(s) compilation warning */
 	UNUSED(huart);
-	HAL_UART_Transmit(&huart2, myRxData, 11, 10);
+	HAL_UART_Transmit(&huart2, myRxData1, 11, 10); //Transmit received data to Console
+
+	HAL_UART_Transmit(&huart1, myRxData1, 11, 10); //Echo via Bluetooth received data
   /* NOTE: This function Should not be modified, when the callback is needed,
            the HAL_UART_TxCpltCallback could be implemented in the user file
    */
