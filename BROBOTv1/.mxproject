@@ -1,7 +1,7 @@
 [PreviousGenFiles]
-HeaderPath=/Users/Amine/Documents/BROBOT docs/BROBOTv1/Inc
+HeaderPath=/Users/Amine/Documents/BROBOT_docs/BROBOT/BROBOTv1/Inc
 HeaderFiles=stm32f4xx_it.h;stm32f4xx_hal_conf.h;main.h;
-SourcePath=/Users/Amine/Documents/BROBOT docs/BROBOTv1/Src
+SourcePath=/Users/Amine/Documents/BROBOT_docs/BROBOT/BROBOTv1/Src
 SourceFiles=stm32f4xx_it.c;stm32f4xx_hal_msp.c;main.c;
 
 [PreviousLibFiles]
