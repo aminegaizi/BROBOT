@@ -41,16 +41,17 @@
 #include "stm32f4xx_hal.h"
 
 /* USER CODE BEGIN Includes */
-
+#include <string.h>
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
-TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim4;
 
-UART_HandleTypeDef huart1; //UART instance communicating with Bluetooth
-UART_HandleTypeDef huart2; //UART instance communicating with console
-DMA_HandleTypeDef hdma_usart1_rx; //RX interrupt
-DMA_HandleTypeDef hdma_usart2_rx; //RX interrupt
+UART_HandleTypeDef huart1;
+UART_HandleTypeDef huart2;
+DMA_HandleTypeDef hdma_usart1_rx;
+DMA_HandleTypeDef hdma_usart2_rx;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
@@ -61,13 +62,13 @@ DMA_HandleTypeDef hdma_usart2_rx; //RX interrupt
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
-static void MX_TIM2_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_TIM4_Init(void);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
-
+void usDelay(uint32_t uSec);
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
@@ -76,6 +77,12 @@ uint8_t myRxData2[11]; //Received Data UART2
 
 uint8_t  myTxData1[13] = "Hello World\r\n"; //Transmitted Data UART1
 uint8_t myRxData1[11]; //Received Data UART1
+
+//Speed of sound in cm/usec
+const float speedOfSound = 0.0343/2;
+float distance;
+
+char uartBuf[100];
 /* USER CODE END 0 */
 
 /**
@@ -86,7 +93,7 @@ uint8_t myRxData1[11]; //Received Data UART1
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
+	uint32_t numTicks = 0;
 
   /* USER CODE END 1 */
 
@@ -109,9 +116,9 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_DMA_Init();
-  MX_TIM2_Init();
   MX_USART2_UART_Init();
   MX_USART1_UART_Init();
+  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
   //HAL_UART_Receive_DMA(&huart2, myRxData, 11);
 
@@ -127,10 +134,42 @@ int main(void)
 
   /* USER CODE BEGIN 3 */
 	 // HAL_UART_Transmit(&huart2, myTxData , 13, 10);
-	  HAL_UART_Transmit(&huart1, myTxData1 , 13, 10); //Transmit to Bluetooth
+	 // HAL_UART_Transmit(&huart1, myTxData1 , 13, 10); //Transmit to Bluetooth
 	  HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin); //Toggle User LED
 
+
+	  //Set TRIG to LOW for few uSec
+	  HAL_GPIO_WritePin(TRIG_GPIO_Port, TRIG_Pin, GPIO_PIN_RESET);
+	  usDelay(3);
+
+	  //*** START Ultrasonic measure routine ***//
+	  //1. Output 10 usec TRIG
+	  HAL_GPIO_WritePin(TRIG_GPIO_Port, TRIG_Pin, GPIO_PIN_SET);
+	  usDelay(10);
+	  HAL_GPIO_WritePin(TRIG_GPIO_Port, TRIG_Pin, GPIO_PIN_RESET);
+
+	  //2. Wait for ECHO pin rising edge
+	  while(HAL_GPIO_ReadPin(ECHO_GPIO_Port, ECHO_Pin) == GPIO_PIN_RESET);
+
+	  //3. Start measuring ECHO pulse width in usec
+	  numTicks = 0;
+	  while(HAL_GPIO_ReadPin(ECHO_GPIO_Port, ECHO_Pin) == GPIO_PIN_SET)
+	  {
+	  	numTicks++;
+	  	usDelay(2); //2.8usec
+	  };
+
+	  //4. Estimate distance in cm
+	  distance = (numTicks + 0.0f)*2.8*speedOfSound;
+
+	  //5. Print to UART terminal for debugging
+	  sprintf(uartBuf, "Distance (cm)  = %0.1f\r\n", distance);
+
+	  HAL_UART_Transmit(&huart1, (uint8_t *)uartBuf, strlen(uartBuf), 100);
+	  HAL_UART_Transmit(&huart2, (uint8_t *)uartBuf, strlen(uartBuf), 100);
+
 	  HAL_Delay(1000); //Delay 1 second
+
   }
   /* USER CODE END 3 */
 
@@ -194,32 +233,32 @@ void SystemClock_Config(void)
   HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
 }
 
-/* TIM2 init function */
-static void MX_TIM2_Init(void)
+/* TIM4 init function */
+static void MX_TIM4_Init(void)
 {
 
   TIM_ClockConfigTypeDef sClockSourceConfig;
   TIM_MasterConfigTypeDef sMasterConfig;
 
-  htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 16000;
-  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 1000;
-  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  htim4.Instance = TIM4;
+  htim4.Init.Prescaler = 84-1;
+  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim4.Init.Period = 0;
+  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
 
   sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
 
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
@@ -338,6 +377,19 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
   /* NOTE: This function Should not be modified, when the callback is needed,
            the HAL_UART_TxCpltCallback could be implemented in the user file
    */
+}
+
+
+void usDelay(uint32_t uSec)
+{
+	if(uSec < 2) uSec = 2;
+		TIM4->ARR = uSec - 1; 	/*sets the value in the auto-reload register*/
+		TIM4->EGR = 1; 			/*Re-initialises the timer*/
+		TIM4->SR &= ~1; 		//Resets the flag
+		TIM4->CR1 |= 1; 		//Enables the counter
+		while((TIM4->SR&0x0001) != 1);
+		TIM4->SR &= ~(0x0001);
+
 }
 /* USER CODE END 4 */
 
