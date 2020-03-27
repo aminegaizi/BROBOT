@@ -46,13 +46,13 @@
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
-TIM_HandleTypeDef htim2;
-TIM_HandleTypeDef htim4;
+TIM_HandleTypeDef htim2;		//Instance Timer2, used for 500us interrupt
+TIM_HandleTypeDef htim4;		//Instance Timer4, used to generate uSec delay
 
-UART_HandleTypeDef huart1;
-UART_HandleTypeDef huart2;
-DMA_HandleTypeDef hdma_usart1_rx;
-DMA_HandleTypeDef hdma_usart2_rx;
+UART_HandleTypeDef huart1;	//Instance UART1 -> communication via BLE
+UART_HandleTypeDef huart2;	//Instance UART2 -> communication console
+DMA_HandleTypeDef hdma_usart1_rx;	//DMA USART1 ISR reception
+DMA_HandleTypeDef hdma_usart2_rx;	//DMA USART2 ISR reception
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
@@ -75,17 +75,17 @@ void UltrasonicSensorHandling();
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
-uint8_t  myTxData2[13] = "Hello World\r\n"; //Transmitted Data UART2
-uint8_t myRxData2[11]; //Received Data UART2
+uint8_t  myTxData2[13] = "Hello World\r\n";		//Transmitted Data UART2
+uint8_t myRxData2[11]; 							//Received Data UART2
 
-uint8_t  myTxData1[13] = "Hello World\r\n"; //Transmitted Data UART1
-uint8_t myRxData1[11]; //Received Data UART1
+uint8_t  myTxData1[13] = "Hello World\r\n"; 		//Transmitted Data UART1
+uint8_t myRxData1[11]; 							//Received Data UART1
 
-//Speed of sound in cm/usec
-const float speedOfSound = 0.0343/2;
-float distance;
 
-char uartBuf[90];
+const float speedOfSound = 0.0343/2;				//Speed of sound in cm/usec
+float distance;									//Distane mesured by Ultrasonic sensor in cm
+
+char uartBuf[90];								//Buffer to transmit distance value to UART
 /* USER CODE END 0 */
 
 /**
@@ -125,8 +125,8 @@ int main(void)
   /* USER CODE BEGIN 2 */
   //HAL_UART_Receive_DMA(&huart2, myRxData, 11);
 
-  HAL_TIM_Base_Start_IT(&htim2);
-  HAL_UART_Receive_DMA(&huart1, myRxData1, 11); //Enable RX interrupt DMA UART1
+  HAL_TIM_Base_Start_IT(&htim2); 					//Init timer 2 interrupt
+  HAL_UART_Receive_DMA(&huart1, myRxData1, 11); 		//Enable RX interrupt DMA UART1
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -137,11 +137,6 @@ int main(void)
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
-	 // HAL_UART_Transmit(&huart2, myTxData , 13, 10);
-	 // HAL_UART_Transmit(&huart1, myTxData1 , 13, 10); //Transmit to Bluetooth
-	  //HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin); //Toggle User LED
-
-	  //HAL_Delay(1000); //Delay 1 second
 
   }
   /* USER CODE END 3 */
@@ -384,7 +379,9 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
    */
 }
 
-
+/*
+ * Generate delay in micro seconds for Ultrasonic sensor handling
+ */
 void usDelay(uint32_t uSec)
 {
 	if(uSec < 2) uSec = 2;
@@ -394,10 +391,13 @@ void usDelay(uint32_t uSec)
 		TIM4->CR1 |= 1; 		//Enables the counter
 		while((TIM4->SR&0x0001) != 1);
 		TIM4->SR &= ~(0x0001);
-
 }
 
-
+/*
+ * Handling of the Ultrasonic sensor
+ * Measurement and calculation of the distance
+ * Send data through UART
+ */
 void UltrasonicSensorHandling()
 {
 	uint32_t numTicks = 0;
